@@ -1117,6 +1117,8 @@ pages_titles = {
 def radio_format(str):
     return pages_titles[str]
 
+st.set_page_config(page_title = 'Algorithmen auf Sequenzen')
+
 st.header('Algorithmen auf Sequenzen')
 sidebar_top = st.sidebar.empty()
 st.sidebar.title('Teil')
