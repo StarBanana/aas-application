@@ -1,3 +1,4 @@
 # aas-application
-
-streamlit run ./Application/Algorithmen\ auf\ Sequenzen.py
+```console
+streamlit run https://raw.githubusercontent.com/StarBanana/aas-application/master/Application/Algorithmen_auf_Sequenzen.py
+```
