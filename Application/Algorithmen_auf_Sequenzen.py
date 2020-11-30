@@ -1182,7 +1182,7 @@ pages = {
     '05': t5,
     '06': t6,
     '07': t7,
-    '08': t8
+    #'08': t8
 }
 
 pages_titles = {
@@ -1194,7 +1194,7 @@ pages_titles = {
     '05': '05: Exakte Mustersuche mit sublinearen Algorithmen',
     '06': '06: Exakte Mustersuche auf Mengen von Mustern',
     '07': '07: Exakte Mustersuche mit erweiterten Mustern',
-    '08': '08: Suffixbäume'
+    #'08': '08: Suffixbäume'
 }
 
 def radio_format(str):
