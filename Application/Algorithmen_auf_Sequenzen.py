@@ -1,9 +1,12 @@
+from numpy.core.numerictypes import find_common_type
 import streamlit as st
 import pandas as pd
 import numpy as np
 import graphviz as gv
 import re
 import streamlit.components.v1 as components
+
+st.set_page_config(page_title = 'Algorithmen auf Sequenzen')
 
 #utility functions
 def ut_check_task(wrong_inputs, solution, key, opt_string_sgl = '', opt_string_pl = ''):    
@@ -67,6 +70,7 @@ def home(seed,sidebar_top):
         - Bei Eingaben von Folgen oder Mengen können die Elemente durch die Zeichen ' ', ',' oder ';' separiert werden.
         - Bei Eingaben von Mengen sind die Mengenklammern '{', '}' optional.
         - Strings werden zufällig mithilfe eines Seeds generiert.
+        - Die Indizierung von Strings beginnt an Position 0.
     """)
 
 def t1(seed, sidebar_top):
@@ -444,13 +448,13 @@ def t4(seed,sidebar_top):
     st.write(r'Führen Sie den Knuth-Morris-Pratt-Algorithmus mit dem Muster $P$ auf dem Text $T$ aus.')
     st.write('Im KMP-Algorithmus wird für jedes Textzeichen $T\\lbrack i\\rbrack =$ c die Funktion `delta` aufgerufen. Geben Sie für jeden Aufruf alle Werte an, die die Variable q annimmt (beginnend mit dem Wert für q mit dem die Funktion aufgerufen wird).')
     st.code('''
-        def delta(q,c,P,lps):
-            m = len(P)
-            while q == m-1 or (P[q+1] != c and q > -1):
-                q = lps[q] - 1
-            if P[q+1] == c:
-                q += 1
-            return q
+    def delta(q,c,P,lps):
+        m = len(P)
+        while q == m-1 or (P[q+1] != c and q > -1):
+            q = lps[q] - 1
+        if P[q+1] == c:
+            q += 1
+        return q
     ''',language='python')
     a3_input = []
     for k,c in enumerate(text):
@@ -727,6 +731,57 @@ def t5(seed, sidebar_top):
         if st.button('Lösung anzeigen', key = 't5_a4_btn'):
             st.table(a4_solution)
 
+class ACNode ():
+    def __init__(self, parent=None, letter=None, depth=0, label=""):
+        self.targets = dict()
+        self.lps = None
+        self.parent = parent
+        self.letter = letter
+        self.out = []
+        self.bfs_order = None        
+
+        if parent == None:
+            self.depth = depth
+            self.label = label
+        else:
+            self.depth = parent.depth + 1
+            self.label = parent.label + letter
+
+    def delta(self,a):
+        q=self
+        while q.lps != None and a not in q.targets:
+            q = q.lps
+        if a in q.targets: 
+            q = q.targets[a] 
+        return q
+
+    def bfs(self):
+        q = [self]
+        while len(q) > 0:
+            node = q.pop(0)
+            yield node
+            q.extend(node.targets.values())
+
+def AC_build(P):
+    root = ACNode()
+    for (i,p) in enumerate(P):
+        node = root
+        for a in p:
+            if a in node.targets:
+                node = node.targets[a]
+            else:
+                newnode = ACNode(parent = node, letter = a)
+                node.targets[a] = newnode
+                node = newnode
+        node.out.append(i)
+
+    for i,node in enumerate(root.bfs()):
+        node.bfs_order = i
+        if node.parent == None: continue
+        node.lps = node.parent.lps.delta(node.letter) if node.depth > 1 else root
+        node.out.extend(node.lps.out)
+    return root
+
 def t6(seed,sidebar_top):
     #parameters
     sigma_l = 97
@@ -739,7 +794,7 @@ def t6(seed,sidebar_top):
     text = ''.join([chr(a) for a in t])
 
     #select random substrings from text as patterns
-    plengths = rg.integers(3,5,rg.integers(3,6))
+    plengths = rg.integers(3,5,rg.integers(3,5))
     pstarts = [ rg.integers(0,tlength - pl) for pl in plengths ]
     patterns_duplicates = [ text[ps:ps+pl] for ps,pl in zip(pstarts,plengths)]
     patterns = [ p for k,p in enumerate(patterns_duplicates) if p not in patterns_duplicates[:k] ]
@@ -762,9 +817,23 @@ def t6(seed,sidebar_top):
             a <<= m
             acc |= a
         return acc>>1
+    
          
-    def t6_a2_draw_aho_corasick_trie(patterns):
+    def t6_a2_draw_aho_corasick_trie(root):        
         d = gv.Digraph()
+        d.graph_attr["rankdir"] = "LR"
+        d.node_attr["shape"] = "circle"
+        d.node_attr["width"] = "0.6"        
+        for node in root.bfs():
+            if node.parent == None:
+                d.node(str(node.bfs_order),style='filled',fillcolor='#a5a6f9')
+            else:
+                d.node(str(node.bfs_order))
+                if node.out: 
+                    d.node(str(node.bfs_order),style = 'filled', fillcolor='#e76960') 
+                d.edge(str(node.parent.bfs_order), str(node.bfs_order), label = node.letter)   
+                if node.lps != root:
+                    d.edge(str(node.bfs_order), str(node.lps.bfs_order), style = 'dashed', constraint = 'false')
         return d
 
     #A1
@@ -791,28 +860,37 @@ def t6(seed,sidebar_top):
             fba1 = f'**Fehler in den Eingaben für {a} und {a1_eva[-1]}.**'
         st.markdown(fba1)
 
-    def t7_opt_a3():                       
-        st.subheader('Aufgabe 3')
-        text_sep = (tlength-2)/3
-        indices = [rg.integers(2,text_sep), rg.integers(text_sep, 2*text_sep), rg.integers(2*text_sep, 3*text_sep)]
-        st.write(f'Geben Sie für den Shift-And-Algorithmus das Bitmuster nach Lesen des {indices[0]}., {indices[1]}. und {indices[2]}. Textzeichens an.')
-        uinput = []
-        for i in indices:
-            uinput.append(st.text_input(f'Bitmuster nach Lesen des {i}. Textzeichens', '', plength, key = f't7_gen_a3_{i}'))
-        solution = t7_opt_shift_and(indices)
-        wrong_inputs = t7_a3_ev(uinput, solution)
-        solution_df = pd.DataFrame(map(lambda x : ut_int_to_base2_string(x,plength), solution), index = indices, columns = ['Bitmuster'])
-        ut_check_task(list(map(lambda x : str(indices[x]),wrong_inputs)), solution_df, opt_string_sgl='das Bitmuster an Position', opt_string_pl='die Bitmuster an den Positionen', key = 't7_gen_a3_check_task')
-
     #A2
     st.subheader('Aufgabe 2')
     st.write('Erstellen Sie für den Aho-Corasick-Algorithmus einen Trie samt lps-Kanten und Ausgabemengen für die Mustermenge $P$.')
-    if st.checkbox('Lösung anzeigen', key = 't5_a2_check'):
-        st.write(t6_a2_draw_aho_corasick_trie(patterns))
+    t6_exp = st.beta_expander('Lösung anzeigen')
+    ac_root = AC_build(patterns)
+    with t6_exp:
+        st.write(t6_a2_draw_aho_corasick_trie(ac_root))
+
 
     #A3
     st.subheader('Aufgabe 3')
-    st.write('Führen Sie den Aho-Corasick-Alogrithmus mit der Mustermenge $P$ auf dem Text $T$ aus. Zeigen Sie, in welchem Zustand sich der Automat bei der Mustersuche nach jedem Textzeichen befindet. ')
+    st.write('Führen Sie den Aho-Corasick-Alogrithmus mit der Mustermenge $P$ auf dem Text $T$ aus. Zeigen Sie, in welchem Zustand sich der Automat bei der Mustersuche nach jedem Textzeichen befindet.')
+    q = ac_root
+    q_list = []
+    for c in text:
+        q = q.delta(c)
+        q_list.append(q.bfs_order)
+    t6_a3_input = st.text_input('Zustandsfolge', key = 't6_a3_input')
+    t6_a3_wrong = False
+    try:
+        t6_a3_input_int = list(map(int,re.split('\s*,\s*|\s*;\s*|\s+',t6_a3_input)))
+        if t6_a3_input_int != q_list or not t6_a3_input_int:
+            t6_a3_wrong = True
+    except ValueError:
+        t6_a3_wrong = True
+    t6_a3_fb = []
+    if t6_a3_wrong:
+        t6_a3_fb.append('die Zustandsfolge')    
+    t6_a3_solution = pd.DataFrame([','.join(map(str,q_list))], index = [''],columns = ['Zustandsfolge'])
+    ut_check_task(t6_a3_fb, t6_a3_solution, key = 't6_a3_check')
+    
 
 def t7(seed, sidebar_top):
     #parameters
@@ -1092,6 +1170,9 @@ def t7(seed, sidebar_top):
     t7_sel = st.radio('Art des erweiterten Musters', options = [t7_1,t7_2],format_func = t7_rad_format, key = 't7_sel')
     t7_sel()
 
+
+
+
 pages = {
     '00': home,
     '01': t1,
@@ -1100,7 +1181,8 @@ pages = {
     '04': t4,
     '05': t5,
     '06': t6,
-    '07': t7
+    '07': t7,
+    '08': t8
 }
 
 pages_titles = {
@@ -1111,13 +1193,12 @@ pages_titles = {
     '04': '04: Exakte Mustersuche mit deterministischen endlichen Automaten',
     '05': '05: Exakte Mustersuche mit sublinearen Algorithmen',
     '06': '06: Exakte Mustersuche auf Mengen von Mustern',
-    '07': '07: Exakte Mustersuche mit erweiterten Mustern'
+    '07': '07: Exakte Mustersuche mit erweiterten Mustern',
+    '08': '08: Suffixbäume'
 }
 
 def radio_format(str):
     return pages_titles[str]
-
-st.set_page_config(page_title = 'Algorithmen auf Sequenzen')
 
 st.header('Algorithmen auf Sequenzen')
 sidebar_top = st.sidebar.empty()
