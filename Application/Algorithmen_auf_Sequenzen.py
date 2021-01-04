@@ -1,3 +1,4 @@
+import graphviz
 from numpy.core.numerictypes import find_common_type
 import streamlit as st
 import pandas as pd
@@ -5,6 +6,7 @@ import numpy as np
 import graphviz as gv
 import re
 import streamlit.components.v1 as components
+import copy
 
 st.set_page_config(page_title = 'Algorithmen auf Sequenzen')
 
@@ -55,6 +57,23 @@ def ut_rnd_text_and_pattern(seed, sigma_l, sigma_r):
     pattern = text[pstart:pstart+plength]
     pattern_tex = f'$P=\\mathtt{{{pattern}}}$'
     return (text, text_tex, tlength, pattern, pattern_tex, plength)
+
+def ut_rnd_string(seed, sigma_l, sigma_r, min_length, max_length, sentinel = False):
+    rg = np.random.default_rng(seed)
+    #generate random text
+    if sentinel:
+        tlength = rg.integers(min_length,max_length)
+        t = rg.integers(sigma_l,sigma_r,tlength)
+        text = ''.join([chr(a) for a in t] + ['$'])
+        text_t = ''.join([chr(a) for a in t] + ['\\$'])
+        text_tex = f'$T=\\mathtt{{{text_t}}}$'
+    else:
+        tlength = rg.integers(min_length,max_length+1)
+        t = rg.integers(sigma_l,sigma_r,tlength)
+        text = ''.join([chr(a) for a in t])
+        text_tex = f'$T=\\mathtt{{{text}}}$'
+    
+    return (text, text_tex, tlength)
 
 def ut_string_base2_to_int(s):
     for c in s:
@@ -868,7 +887,6 @@ def t6(seed,sidebar_top):
     with t6_exp:
         st.write(t6_a2_draw_aho_corasick_trie(ac_root))
 
-
     #A3
     st.subheader('Aufgabe 3')
     st.write('Führen Sie den Aho-Corasick-Alogrithmus mit der Mustermenge $P$ auf dem Text $T$ aus. Zeigen Sie, in welchem Zustand sich der Automat bei der Mustersuche nach jedem Textzeichen befindet.')
@@ -1170,6 +1188,296 @@ def t7(seed, sidebar_top):
     t7_sel = st.radio('Art des erweiterten Musters', options = [t7_1,t7_2],format_func = t7_rad_format, key = 't7_sel')
     t7_sel()
 
+class ST_node():
+    def __init__(self,text, left, right = -1, parent=None):
+        self.text = text
+        self.children = []
+        self.parent = parent        
+        self.left = left
+        self.right = right        
+        self.suffix_link = None
+        self.bfs_order = None
+        self.str_dep = None
+        self.suffix_start_pos = None        
+
+    def find_child(self, c):
+        for child in self.children:
+            if self.text[child.left] == c:
+                return child
+        return None
+        
+    
+    def canonize(self,left, offset):
+        if offset == -1:
+            return self, -1,0
+        if left == -1:
+            return self, left, offset
+        else:
+            child = self.find_child(self.text[left])
+            left = child.left
+            if offset == child.right-child.left-1:
+                return child, -1 ,0
+            if offset  < child.right  or child.right == -1:
+                return self, left, offset
+            else:
+                return child.canonize(left+offset, offset - (child.right - child.left))
+            
+
+    def extend(self,active_left, active_offset,c,c_pos, suffix_link_node = None): 
+        if active_left == -1:
+            child = self.find_child(c)
+            if suffix_link_node is not None:
+                suffix_link_node.suffix_link = self
+            if child is not None:                 
+                return self.canonize(child.left, 0)  
+            new_child = ST_node(self.text,c_pos, parent = self)
+            self.children.append(new_child)
+            if self.parent is None:
+                return self,-1,0
+            if self.suffix_link is not None:                
+                return self.suffix_link.extend(-1,0,c,c_pos)
+            else:
+                suffix_link_node, suffix_link_left, suffix_link_right = self.parent.suffix_link.canonize(self.parent.left, self.parent.right)
+                return suffix_link_node.extend(suffix_link_left, suffix_link_right, c, c_pos)
+        else:               
+            if self.text[active_left + active_offset+1] == c:
+                return self.canonize(active_left, active_offset+1)
+            else:
+                child = self.find_child(self.text[active_left])
+                split_node = ST_node(self.text,active_left,active_left+active_offset+1, parent = self)
+                child.parent = split_node
+                child.left = active_left+active_offset+1
+                self.children.remove(child)
+                self.children.append(split_node)
+                new_child = ST_node(self.text,c_pos, parent = split_node)
+                split_node.children.extend([child,new_child])                         
+
+                if suffix_link_node is not None:
+                    suffix_link_node.suffix_link = split_node
+
+                if self.parent is None:
+                    split_node.str_dep = split_node.right - split_node.left
+                    node, left, offset = self.canonize(active_left+1, active_offset-1)
+                    return node.extend(left,offset,c,c_pos, suffix_link_node=split_node)
+
+                else:
+                    split_node.str_dep = self.str_dep + (split_node.right - split_node.left)
+                    if self.suffix_link is None:                                 
+                        if active_offset - 1 == -1:
+                            active_left = c_pos - 1
+                        if self.find_child(self.text[active_left+1]) is None:
+                            return self.extend(active_left+1, active_offset-1, self.text[active_left+1],active_left+1, suffix_link_node= split_node)
+                        node, left, offset = self.canonize(active_left+1, active_offset-1)
+                    else:
+                        node, left, offset = self.suffix_link.canonize(split_node.left,split_node.right-split_node.left-1)
+                    return node.extend(left,offset,c,c_pos, suffix_link_node = split_node)
+
+    def bfs(self):
+        q = [self]
+        while len(q) > 0:
+            node = q.pop(0)
+            yield node
+            q.extend(node.children)
+
+    def to_string(self):
+        node = self    
+        substrings = []       
+        while node.parent is not None:
+            substrings.insert(0, self.text[node.left:node.right])
+            node = node.parent
+        return ''.join(substrings)
+
+
+def st_build(text):
+    root = ST_node(text,0)
+    root.str_dep = 0
+    active , active_left, active_offset = root,-1,0
+    for i,c in enumerate(text):                        
+        active, active_left, active_offset = active.extend(active_left,active_offset, c,i)
+    for i,node in enumerate(root.bfs()):
+        node.bfs_order=i
+        node.children = sorted(node.children, key = lambda x: text[x.left])
+    return root, active.bfs_order, active_left, active_offset
+
+def st_final(root):
+    tlength = len(root.text)
+    for node in root.bfs():
+        if not node.children:
+            node.right = tlength
+            node.suffix_start_pos = node.right-(node.right - node.left) - node.parent.str_dep
+    return root
+
+def st_to_gv(root, active_node = None, string_labels = False):
+    d = gv.Digraph()
+    d.node_attr["shape"] = "circle"
+    d.node_attr["width"] = "0.3"
+    for node in root.bfs():
+        if node.parent is None:            
+            d.node(str(node.bfs_order), label = '')
+        else:
+            d.node(str(node.bfs_order), label = '')
+            if string_labels:
+                d.edge(str(node.parent.bfs_order), str(node.bfs_order), label=root.text[node.left:node.right])
+            else:
+                d.edge(str(node.parent.bfs_order), str(node.bfs_order), label=f'({node.left}:{node.right})')
+            if node.suffix_link is not None and node.suffix_link.parent is not None:
+                d.edge(str(node.bfs_order), str(node.suffix_link.bfs_order), style = 'dashed', constraint = 'false', color = 'darkgreen')
+        if not node.children and node.suffix_start_pos is not None:
+            d.node(str(node.bfs_order), label = str(node.suffix_start_pos), width = '0.6')
+    if active_node is not None:
+        d.node(str(active_node), color = 'red')
+    return d
+
+def t8(seed, sidebar_top):
+    SIGMA_L = 97
+    SIGMA_R = 100
+    sigma = [ chr(i) for i in range(SIGMA_L,SIGMA_R) ]    
+    #random text, pattern:
+    text, text_tex, tlength, pattern, pattern_tex, plength = ut_rnd_text_and_pattern(seed,SIGMA_L,SIGMA_R)
+    text = f'{text}$'
+
+    st.write(f'Gegeben Sei der Text {text_tex}$.')
+    
+    #st.write(st_to_gv(st_build('babacacb$')))
+
+    #A1
+    st.subheader('Aufgabe 1')
+    st.write('Zeichnen Sie den Suffixbaum zu $T$.')
+    st.write('**Lösung:**')
+    iteration = st.slider('Iteration', -1, tlength)
+    if iteration == -1:
+        st.write('Iteration wählen')
+    #elif iteration == tlength:
+    #    st.write(st_to_gv(st_final(st_build(text))))
+    else:
+        root, active_node_bfs_order, active_left, active_offset = st_build(text[:iteration+1])
+        if iteration == tlength:
+            root = st_final(root)
+        edge_strings = st.checkbox('Strings anzeigen')
+        if edge_strings:
+            st.write(st_to_gv(root,active_node = active_node_bfs_order, string_labels = True))
+        else:
+            st.write(st_to_gv(root,active_node = active_node_bfs_order))
+        st.write(f'Aktive Position: {active_left} + {active_offset}')
+        st.markdown('*Suffixlinks die auf die Wurzel zeigen sind nicht eingezeichnet.*')
+
+
+    stree = st_final(st_build(text)[0])
+    #A2
+    st.subheader('Aufgabe 2')
+    st.write('Geben Sie den/einen längsten wiederholten Teilstring von $T$ an.')
+    
+    a2_input = st.text_input('LRS', key = 't8_a2_input')
+
+    max_str_dep = 0
+    max_str_dep_node_list = [stree]
+    for node in stree.bfs():
+        if node.str_dep is not None:
+            if node.str_dep > max_str_dep:
+                max_str_dep = node.str_dep
+                max_str_dep_node_list = [node]
+            elif node.str_dep == max_str_dep:             
+                max_str_dep_node_list.append(node)
+    
+    lrs_list = []  
+    for node in max_str_dep_node_list:        
+        lrs_substrings = []          
+        while node.parent is not None:
+            lrs_substrings.insert(0, text[node.left:node.right])
+            node = node.parent
+        lrs_list.append(''.join(lrs_substrings))
+    a2_wrong_inputs = []
+    if a2_input not in lrs_list:
+        a2_wrong_inputs.append('den längsten wiederholten Teilstring')
+    a2_solution_df = pd.DataFrame(lrs_list,index = [ '' for s in lrs_list ], columns = ['LRS']) 
+    ut_check_task(a2_wrong_inputs,a2_solution_df,key = 't8_a2_check')
+
+    #A3
+    st.subheader('Aufgabe 3')
+    st.write('Geben Sie den/einen kürzesten eindeutigen Teilstring von $T$ an.')
+
+    sus_node_list = []
+    sus_node_str_dep_min = tlength
+    for node in stree.bfs():
+        if not node.children:            
+            if text[node.left] != '$':                
+                if not sus_node_list or node.parent.str_dep == sus_node_str_dep_min:                    
+                    sus_node_list.append(node)
+                    sus_node_str_dep_min = node.parent.str_dep
+                elif node.parent.str_dep < sus_node_str_dep_min:
+                    sus_node_list = [node]
+                    sus_node_str_dep_min = node.parent.str_dep
+    
+    sus_list = [] 
+    for node in sus_node_list:
+        sus_substrings = []
+        sus_substrings.append(text[node.left])
+        if node.parent is not None:
+            node = node.parent
+        while node.parent is not None:
+            sus_substrings.insert(0, text[node.left:node.right])
+            node = node.parent
+        sus_list.append(''.join(sus_substrings))
+    
+    a3_input = st.text_input('SUS','',key = 't8_a3_input')
+    a3_wrong_inputs = []
+    if a3_input not in sus_list:
+        a3_wrong_inputs.append('den kürzesten eindeutigen Teilstring')
+    a3_solution_df = pd.DataFrame(sus_list,index = [ '' for s in sus_list ], columns = ['SUS'])    
+    ut_check_task(a3_wrong_inputs,a3_solution_df, key = 't8_a3_check')
+
+    #A4
+    st.subheader('Aufgabe 4')
+    rg1 = np.random.default_rng(seed)
+    t1_chrs = rg1.integers(SIGMA_L,SIGMA_R, rg1.integers(6,9))
+    t1 = ''.join([ chr(a) for a in t1_chrs] + [chr(35)])    
+    t1_tex = ''.join([ chr(a) for a in t1_chrs] + ['\\#'])    
+    rg2 = np.random.default_rng(seed*2)
+    t2_chrs = rg2.integers(SIGMA_L,SIGMA_R, rg2.integers(6,9))    
+    t2 = ''.join([ chr(a) for a in t2_chrs] + [chr(36)])
+    t2_tex = ''.join([ chr(a) for a in t2_chrs] + ['\\$'])
+    st.write(f'Sei $T_1=\\texttt{{{t1_tex}}}$  und $T_2=\\texttt{{{t2_tex}}}$.')
+    st.write('Geben Sie den/einen längsten gemeinsamen Teilstring von $T_1$ und $T_2$ an.')    
+    a4_stree = st_final(st_build(t1+t2)[0])
+   
+    a4_input = st.text_input('LCS', '', key = 't8_a4_input')
+
+    a4_show_stree_exp = st.beta_expander('Suffixbaum anzeigen')
+    with a4_show_stree_exp:        
+       st.write(f'Suffixbaum für den Text $\\texttt{{{t1_tex}{t2_tex}}}$:')
+       st.write(st_to_gv(a4_stree))
+
+    def a4_choose_candidates(node,t1length):
+        if not node.children:
+            if node.suffix_start_pos in range(t1length):
+                return 1,[]
+            else:
+                return 2,[]
+        else:
+            children_ret = list(map(lambda x : a4_choose_candidates(x,t1length), node.children))
+            children_labels = set(map(lambda x : x[0], children_ret))
+            children_node_lists = map(lambda x : x[1], children_ret)
+            if len(children_labels) == 2:                
+                return 3, sum(children_node_lists,[node])
+            else:
+                return children_labels.pop(), sum(children_node_lists,[])
+
+    node_candidates = a4_choose_candidates(a4_stree, len(t1))[1]
+    lcs_max_length = 0
+    lcs_nodes = []
+    for node in node_candidates:
+        if node.str_dep == lcs_max_length:
+            lcs_nodes.append(node)
+        elif node.str_dep > lcs_max_length:
+            lcs_max_length = node.str_dep
+            lcs_nodes = [node]
+    lcs_list = [ x.to_string() for x in lcs_nodes ]
+    a4_wrong_inputs = []
+    if a4_input not in lcs_list:
+        a4_wrong_inputs.append('den längsten gemeinsamen Teilstring')
+    a4_solution_df = pd.DataFrame(lcs_list, columns = ['LCS'],index = [ '' for s in lcs_list ])
+    ut_check_task(a4_wrong_inputs, a4_solution_df, key = 't8_a4_check')
+
 
 
 
@@ -1182,7 +1490,8 @@ pages = {
     '05': t5,
     '06': t6,
     '07': t7,
-    #'08': t8
+    '08': t8,
+   # '09': t9
 }
 
 pages_titles = {
@@ -1194,11 +1503,12 @@ pages_titles = {
     '05': '05: Exakte Mustersuche mit sublinearen Algorithmen',
     '06': '06: Exakte Mustersuche auf Mengen von Mustern',
     '07': '07: Exakte Mustersuche mit erweiterten Mustern',
-    #'08': '08: Suffixbäume'
+    '08': '08: Suffixbäume',
+    #'09': '09: Suffixarrays'
 }
 
 def radio_format(str):
-    return pages_titles[str]
+    return pages_titles[str]    
 
 st.header('Algorithmen auf Sequenzen')
 sidebar_top = st.sidebar.empty()
