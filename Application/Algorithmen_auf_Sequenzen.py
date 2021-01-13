@@ -67,13 +67,30 @@ def ut_rnd_string(seed, sigma_l, sigma_r, min_length, max_length, sentinel = Fal
         text = ''.join([chr(a) for a in t] + ['$'])
         text_t = ''.join([chr(a) for a in t] + ['\\$'])
         text_tex = f'$T=\\mathtt{{{text_t}}}$'
+        tlength +=1
     else:
-        tlength = rg.integers(min_length,max_length+1)
+        tlength = rg.integers(min_length,max_length)
         t = rg.integers(sigma_l,sigma_r,tlength)
         text = ''.join([chr(a) for a in t])
-        text_tex = f'$T=\\mathtt{{{text}}}$'
-    
+        text_tex = f'$T=\\mathtt{{{text}}}$'    
     return (text, text_tex, tlength)
+def ut_strcmp(s1,s2):
+    '''String comparison.
+
+        Returns
+        -------
+        i:-1 if s1 < s2, 0 if s1 = s2, 1 if s1 > s2
+        n: length of the longest common prefix of s1 and s2
+    '''
+    n = 0
+    for c1,c2 in zip(s1,s2):
+        if c1 < c2:
+            return -1, n
+        elif c1 > c2:
+            return 1,n
+        n+=1
+    len_diff = len(s1)-len(s2)
+    return (len_diff>0) - (len_diff<0),n
 
 def ut_string_base2_to_int(s):
     for c in s:
@@ -1083,7 +1100,7 @@ def t7(seed, sidebar_top):
             st.write(f'Geben Sie für den Shift-And-Algorithmus das Bitmuster nach Lesen der Textzeichen an den Positionen {indices[0]}, {indices[1]} und {indices[2]} an.')
             uinput = []
             for i in indices:
-                uinput.append(st.text_input(f'Bitmuster nach Lesen des {i}. Textzeichens', '', len(pattern_gen_max), key = f't7_gen_a3_{i}'))
+                uinput.append(st.text_input(f'Bitmuster nach Lesen des Textzeichens an Position {i}.', '', len(pattern_gen_max), key = f't7_gen_a3_{i}'))
             solution = t7_gen_shift_and(indices)
             wrong_inputs = t7_a3_ev(uinput, solution)
             solution_df = pd.DataFrame(map(lambda x : ut_int_to_base2_string(x,len(pattern_gen_max)), solution), index = indices, columns = ['Bitmuster'])
@@ -1175,7 +1192,7 @@ def t7(seed, sidebar_top):
             st.write(f'Geben Sie für den Shift-And-Algorithmus das Bitmuster nach Lesen der Textzeichen an den Positionen {indices[0]}, {indices[1]} und {indices[2]} an.')
             uinput = []
             for i in indices:
-                uinput.append(st.text_input(f'Bitmuster nach Lesen des {i}. Textzeichens', '', plength, key = f't7_gen_a3_{i}'))
+                uinput.append(st.text_input(f'Bitmuster nach Lesen des Textzeichens an Position {i}.', '', plength, key = f't7_gen_a3_{i}'))
             solution = t7_opt_shift_and(indices)
             wrong_inputs = t7_a3_ev(uinput, solution)
             solution_df = pd.DataFrame(map(lambda x : ut_int_to_base2_string(x,plength), solution), index = indices, columns = ['Bitmuster'])
@@ -1287,7 +1304,6 @@ class ST_node():
             node = node.parent
         return ''.join(substrings)
 
-
 def st_build(text):
     root = ST_node(text,0)
     root.str_dep = 0
@@ -1316,8 +1332,8 @@ def st_to_gv(root, active_node = None, string_labels = False):
             d.node(str(node.bfs_order), label = '')
         else:
             d.node(str(node.bfs_order), label = '')
-            if string_labels:
-                d.edge(str(node.parent.bfs_order), str(node.bfs_order), label=root.text[node.left:node.right])
+            if string_labels:                
+                d.edge(str(node.parent.bfs_order), str(node.bfs_order), label=f'{root.text[node.left:node.right]}')
             else:
                 d.edge(str(node.parent.bfs_order), str(node.bfs_order), label=f'({node.left}:{node.right})')
             if node.suffix_link is not None and node.suffix_link.parent is not None:
@@ -1422,7 +1438,7 @@ def t8(seed, sidebar_top):
     a3_input = st.text_input('SUS','',key = 't8_a3_input')
     a3_wrong_inputs = []
     if a3_input not in sus_list:
-        a3_wrong_inputs.append('den kürzesten eindeutigen Teilstring')
+        a3_wrong_inputs.append('den/einen kürzesten eindeutigen Teilstring')
     a3_solution_df = pd.DataFrame(sus_list,index = [ '' for s in sus_list ], columns = ['SUS'])    
     ut_check_task(a3_wrong_inputs,a3_solution_df, key = 't8_a3_check')
 
@@ -1474,9 +1490,230 @@ def t8(seed, sidebar_top):
     lcs_list = [ x.to_string() for x in lcs_nodes ]
     a4_wrong_inputs = []
     if a4_input not in lcs_list:
-        a4_wrong_inputs.append('den längsten gemeinsamen Teilstring')
+        a4_wrong_inputs.append('den/einen längsten gemeinsamen Teilstring')
     a4_solution_df = pd.DataFrame(lcs_list, columns = ['LCS'],index = [ '' for s in lcs_list ])
     ut_check_task(a4_wrong_inputs, a4_solution_df, key = 't8_a4_check')
+
+def t9(seed,sidebar_top):
+    def bin_search_suff_arr(text,pattern,suff_arr,l,r):
+        m = int(l+((r-l)/2))
+        res = ut_strcmp(pattern, text[suff_arr[m]:suff_arr[m]+len(pattern)])[0]
+        if r < l:
+            return -1
+        elif res == -1:
+            return bin_search_suff_arr(text,pattern,suff_arr,l,m)
+        elif res == 0:
+            return m
+        else:
+            return bin_search_suff_arr(text,pattern,suff_arr,m+1, r)
+            
+    def suffix_types(text):
+        types = ['S']        
+        next_c = '$'
+        for c in text[::-1][1:]:
+            if c < next_c:
+                types.append('S')
+            elif c > next_c:
+                types.append('L')
+            else:
+                types.append(types[-1])
+            next_c = c  
+        return types[::-1]
+ 
+    SIGMA_L = 97
+    SIGMA_R = 100
+    #text, text_tex, tlength = ut_rnd_string(seed, SIGMA_L, SIGMA_R, 12,18,True)    
+    text, text_tex, tlength, pattern, pattern_tex, plength = ut_rnd_text_and_pattern(seed, SIGMA_L,SIGMA_R)
+    text += '$'
+    text_tex += '\$'
+    tlength += 1    
+    st.write(f'Gegeben sei der Text {text_tex} und das Muster {pattern_tex}.')
+    sidebar_top.info(f'{text_tex}\n\r{pattern_tex}')
+
+    #A1
+    st.subheader('Aufgabe 1')    
+    st.write('Geben Sie zu jeder Position in $T$ den Typen des an dieser Position beginnenden Suffixes an (S oder L).')
+    st.markdown('*Für diese Aufgabe kann das Array auch als String eingegeben werden, z.B. * LLLSSLS.')
+
+    a1_input = st.text_input('Suffix-Typen','', key = 't9_a1_input')    
+    a1_input_list = [ x for x in re.split(r'(,|;| ?)*', a1_input) if x != '']
+    suffix_types = suffix_types(text)
+    a1_solution = pd.DataFrame([list(text),suffix_types], index = ['T[i]','type[i..]'])
+    a1_wrong_inputs = []
+    if a1_input_list != suffix_types:
+        a1_wrong_inputs.append('die Suffix-Typen')    
+
+    ut_check_task(a1_wrong_inputs, a1_solution, key = 't9_a1_check')
+
+    lms_suffixes = []
+    first_s_type = True
+    for i,t in enumerate(suffix_types):
+        if t == 'S' and first_s_type:
+            lms_suffixes.append(i) 
+            first_s_type = False
+        elif t == 'L':
+            first_s_type = True    
+        
+    
+    #A2
+    st.subheader('Aufgabe 2')
+    st.write('Führen Sie einen Links-Induktions-Scan auf dem unten gegebenen Array pos durch.')
+
+    lms_suffixes_sorted = sorted(lms_suffixes, key = lambda x: text[x:])    
+
+    buckets = np.array(sorted(list(text)))
+    buckets_last_free_index = dict()
+    buckets_first_free_index = dict()
+
+    for i in range(buckets.shape[0]):
+        if i == tlength-1:
+            buckets_last_free_index[buckets[i]] = i
+        if buckets[i] != buckets[i-1]:
+            buckets_last_free_index[buckets[i-1]] = i-1
+            buckets_first_free_index[buckets[i]] = i            
+
+    suff_arr = np.repeat(-1,tlength)
+
+    lms_positions = []
+    for s in lms_suffixes_sorted[::-1]:
+        suff_arr[buckets_last_free_index[text[s]]] = s
+        lms_positions.append(buckets_last_free_index[text[s]])
+        buckets_last_free_index[text[s]]  -= 1
+
+    suff_arr_li = np.copy(suff_arr)
+    
+    for r in range(tlength):
+        pos_r = suff_arr_li[r]
+        if pos_r != -1 and suffix_types[pos_r-1] == 'L':
+            suff_arr_li[buckets_first_free_index[text[pos_r-1]]] = pos_r-1
+            buckets_first_free_index[text[pos_r-1]] += 1
+
+
+    a2_red_arr = pd.DataFrame([suff_arr, buckets], index = ['pos[r]','bucket[r]'])
+    st.table(a2_red_arr)
+
+    a2_input = st.text_input('pos nach Links-Induktions-Scan','',key = 't9_a2_input')
+
+    a2_input_list = re.split(r'[,; ]+', a2_input)
+
+    a2_wrong_inputs = []
+    for i,k in enumerate(a2_input_list):
+        try:
+            if int(k) != suff_arr_li[i]:
+                a2_wrong_inputs.append('das pos Array nach dem Links-Induktions-Scan.')
+        except ValueError:
+            a2_wrong_inputs.append('das pos Array nach dem Links-Induktions-Scan')
+    
+    a2_solution = pd.DataFrame([suff_arr_li], index=['pos[r]'])
+    ut_check_task(a2_wrong_inputs, a2_solution,  key = 't9_a2_check')    
+    
+    #A3
+    st.subheader('Aufgabe 3')
+    st.write('Führen Sie einen Rechts-Induktions-Scan durch.')
+    suff_arr_ri = np.copy(suff_arr_li)
+    for i in lms_positions:
+        buckets_last_free_index[text[suff_arr_ri[i]]] += 1
+        suff_arr_ri[i] = -1
+
+    for r in range(tlength-1,0, -1):
+        pos_r = suff_arr_ri[r]
+        if pos_r != -1 and suffix_types[pos_r-1] == 'S':            
+            suff_arr_ri[buckets_last_free_index[text[pos_r-1]]] = pos_r-1
+            buckets_last_free_index[text[pos_r-1]] -= 1        
+    suff_arr_ri[0] = tlength-1    
+
+    a3_input = st.text_input('pos nach Rechts-Induktions-Scan','',key = 't9_a3_input')
+
+    a3_input_list = re.split(r'[,; ]+', a3_input)
+
+    a3_wrong_inputs = []
+    for i,k in enumerate(a3_input_list):
+        try:
+            if int(k) != suff_arr_ri[i]:
+                a3_wrong_inputs.append('das pos Array nach dem Rechts-Induktions-Scan.')
+        except ValueError:
+            a3_wrong_inputs.append('das pos Array nach dem Rechts-Induktions-Scan')
+    
+    a3_solution = pd.DataFrame([suff_arr_ri], index=['pos[r]'])
+    ut_check_task(a3_wrong_inputs, a3_solution,  key = 't9_a3_check')   
+
+    suff_arr = suff_arr_ri
+
+    #A4
+    st.subheader('Aufgabe 4')
+    st.write('Führen Sie eine Mustersuche nach dem Muster $P$ mithilfe des Suffixarrays zu $T$ durch. Geben Sie den Rang des Suffixes an, das bei einer binären Suche auf dem Suffixarray gefunden wird.')
+    a4_input = st.text_input('Rang des Suffixes','',key = 't9_a4_input')
+    a4_solution = bin_search_suff_arr(text,pattern,suff_arr,0,suff_arr.shape[0])    
+    a4_solution_string = f'Der Rang des gesuchten Suffixes ist {a4_solution}.'
+    a4_wrong_inputs = []
+    try:
+        if int(a4_input) != a4_solution:
+            a4_wrong_inputs.append('den Rang des Suffixes')
+    except ValueError:
+        a4_wrong_inputs.append('den Rang des Suffixes')
+    ut_check_task(a4_wrong_inputs,a4_solution_string,key = 't9_a4_check')
+    
+    #A5
+    st.subheader('Aufgabe 5')
+    st.write('Geben Sie das lcp-Array zu dem Suffixarray zu $T$ an.')
+
+    a5_input = st.text_input('lcp-Array','',key = 't9_a5_input')
+    lcp = np.ndarray(suff_arr.shape)
+    lcp[0] = -1
+    for i in range(1,suff_arr.shape[0]):
+        lcp[i] = ut_strcmp(text[suff_arr[i-1]:], text[suff_arr[i]:])[1]
+    a5_wrong_inputs = []    
+    try:        
+        if list(lcp) != list(map(int,re.split(r'[,; ]+', a5_input))):
+            a5_wrong_inputs.append('das lcp-Array')
+    except ValueError:
+        a5_wrong_inputs.append('das lcp-Array')        
+    a5_solution_df = pd.DataFrame([ (r,suff_arr[r],lcp[r],text[suff_arr[r]:]) for r in range(tlength) ],index = [''] * tlength, columns = ['r','pos[r]','lcp[r]','T[pos[r]:]'])
+    ut_check_task(a5_wrong_inputs, a5_solution_df, key = 't9_a5_check')
+
+    #A6
+    st.subheader('Aufgabe 6')
+    st.write('Geben Sie den/einen längsten wiederholten  Teilstring von $T$ mithilfe des lcp-Arrays an.')
+
+    a6_input = st.text_input('LRS')
+
+    lrs_length = np.amax(lcp).astype(int)
+    lrs_ranks = np.argwhere(lcp == lrs_length).flatten()
+    lrs_pos = suff_arr[lrs_ranks].flatten()    
+    lrs = [ text[i:i+lrs_length] for i in lrs_pos ]
+
+    a6_wrong_inputs = []
+    if a6_input not in lrs:
+        a6_wrong_inputs.append('der Eingabe für den/einen längsten wiederholten Teilstring.')
+    a6_solution_df = pd.DataFrame([(r,pos_r, lcp_r, lrs_s) for r,pos_r,lcp_r,lrs_s in zip(lrs_ranks,lcp[lrs_ranks],lrs_pos,lrs)], index = ['']*lrs_ranks.shape[0], columns = ('r','lcp[r]','pos[r]','T[pos[r]:pos[r]+lcp[r]]'))
+    ut_check_task(a6_wrong_inputs,a6_solution_df, key = 't9_a6_check')
+
+    #A7
+    st.subheader('Aufgabe 7')
+    st.write('Geben Sie den/einen kürzesten eindeutigen Teilstring von $T$ mithilfe des lcp-Arrays an.')
+
+    a7_input = st.text_input('SUS', '' ,key = 't9_a7_input')
+
+    ulen = np.ndarray(suff_arr.shape)
+    for r in range(ulen.size-1):
+        ulen[r] = 1 + max(lcp[r],lcp[r+1])
+        if suff_arr[r]+ulen[r] >= tlength:
+            ulen[r] = tlength
+    ulen[-1] = 1+lcp[-1]
+    sus_length = np.amin(ulen).astype(int)
+    sus_ranks = np.argwhere(ulen == sus_length).flatten()
+    sus_pos = suff_arr[sus_ranks].flatten() 
+    sus = [ text[i:i+sus_length] for i in sus_pos ] 
+    
+    a7_wrong_inputs = []
+    if a7_input not in sus:
+        a7_wrong_inputs.append('der Eingabe für den/einen kürzesten eindeutigen Teilstring.')
+    a7_solution_df = pd.DataFrame([(r,pos_r,ulen_r,sus_s) for r,pos_r,ulen_r,sus_s in zip(sus_ranks, sus_pos,[sus_length] * len(sus), sus)], index = [''] * len(sus), columns = ['r','pos[r]','ulen[r]','T[pos[r]:ulen[r]]'])
+    ut_check_task(a7_wrong_inputs,a7_solution_df,key = 't9_a7_check')
+
+
+
+
 
 
 
@@ -1491,7 +1728,7 @@ pages = {
     '06': t6,
     '07': t7,
     '08': t8,
-   # '09': t9
+    '09': t9
 }
 
 pages_titles = {
@@ -1504,7 +1741,7 @@ pages_titles = {
     '06': '06: Exakte Mustersuche auf Mengen von Mustern',
     '07': '07: Exakte Mustersuche mit erweiterten Mustern',
     '08': '08: Suffixbäume',
-    #'09': '09: Suffixarrays'
+    '09': '09: Suffixarrays'
 }
 
 def radio_format(str):
