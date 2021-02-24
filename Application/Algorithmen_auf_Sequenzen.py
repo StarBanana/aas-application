@@ -1,12 +1,11 @@
-import graphviz
-from numpy.core.numerictypes import find_common_type
+from collections import defaultdict
 import streamlit as st
 import pandas as pd
 import numpy as np
 import graphviz as gv
 import re
-import streamlit.components.v1 as components
-import copy
+import itertools
+
 
 st.set_page_config(page_title = 'Algorithmen auf Sequenzen')
 
@@ -25,8 +24,11 @@ def ut_check_task(wrong_inputs, solution, key, opt_string_sgl = '', opt_string_p
                 fb = f'**Fehler in den Eingaben für {opt_string_pl} **{a}**.**'
             st.markdown(fb)
             if st.button('Lösung anzeigen', key=key):
-                if(type(solution) == pd.DataFrame):
+                if type(solution) == pd.DataFrame:
                     st.table(solution)
+                elif type(solution) == list:
+                    for x in solution:
+                        st.write(x)
                 else: st.write(solution)
 
 def ut_int_to_base2_string(a, min_length = 0): 
@@ -42,23 +44,25 @@ def ut_int_to_base2_string(a, min_length = 0):
     sl.reverse()
     return ''.join(sl)
 
-@st.cache
-def ut_rnd_text_and_pattern(seed, sigma_l, sigma_r):
+def ut_rnd_text_and_pattern(seed, sigma_l, sigma_r, t_min_length = 12, t_max_length = 20, p_min_length = 4, p_max_length = 8, sentinel = False):
     rg = np.random.default_rng(seed)
     #generate random text
-    tlength = rg.integers(12,21)
+    tlength = rg.integers(t_min_length,t_max_length+1)
     t = rg.integers(sigma_l,sigma_r,tlength)
     text = ''.join([chr(a) for a in t]) 
     tlength = len(text)
     text_tex = f'$T=\\mathtt{{{text}}}$'
     #select random substring from text as pattern
-    plength = rg.integers(4,9)
+    plength = rg.integers(p_min_length,p_max_length+1)
     pstart = rg.integers(0,len(text) - plength)
     pattern = text[pstart:pstart+plength]
     pattern_tex = f'$P=\\mathtt{{{pattern}}}$'
+    if sentinel:
+        text = text[:-1] + '$'
+        text_tex = text_tex[:-3] + '\\$}$'
     return (text, text_tex, tlength, pattern, pattern_tex, plength)
 
-def ut_rnd_string(seed, sigma_l, sigma_r, min_length, max_length, sentinel = False):
+def ut_rnd_string(seed, sigma_l, sigma_r, min_length, max_length, sentinel = False, name = 'T'):
     rg = np.random.default_rng(seed)
     #generate random text
     if sentinel:
@@ -66,14 +70,15 @@ def ut_rnd_string(seed, sigma_l, sigma_r, min_length, max_length, sentinel = Fal
         t = rg.integers(sigma_l,sigma_r,tlength)
         text = ''.join([chr(a) for a in t] + ['$'])
         text_t = ''.join([chr(a) for a in t] + ['\\$'])
-        text_tex = f'$T=\\mathtt{{{text_t}}}$'
+        text_tex = f'${name}=\\texttt{{{text_t}}}$'
         tlength +=1
     else:
         tlength = rg.integers(min_length,max_length)
         t = rg.integers(sigma_l,sigma_r,tlength)
         text = ''.join([chr(a) for a in t])
-        text_tex = f'$T=\\mathtt{{{text}}}$'    
+        text_tex = f'${name}=\\texttt{{{text}}}$'    
     return (text, text_tex, tlength)
+
 def ut_strcmp(s1,s2):
     '''String comparison.
 
@@ -99,7 +104,7 @@ def ut_string_base2_to_int(s):
     return int(s,2)
 
 def home(seed,sidebar_top):
-    st.write('---text---')
+    st.write('Lernanwendung zur Vorlesung Algorithmen auf Sequenzen.')
 
     st.subheader('Hinweise')
     st.markdown("""
@@ -1349,10 +1354,8 @@ def t8(seed, sidebar_top):
     SIGMA_R = 100
     sigma = [ chr(i) for i in range(SIGMA_L,SIGMA_R) ]    
     #random text, pattern:
-    text, text_tex, tlength, pattern, pattern_tex, plength = ut_rnd_text_and_pattern(seed,SIGMA_L,SIGMA_R)
-    text = f'{text}$'
-
-    st.write(f'Gegeben Sei der Text {text_tex}$.')
+    text, text_tex, tlength, pattern, pattern_tex, plength = ut_rnd_text_and_pattern(seed,SIGMA_L,SIGMA_R,sentinel = True)
+    st.write(f'Gegeben Sei der Text {text_tex}.')
     
     #st.write(st_to_gv(st_build('babacacb$')))
 
@@ -1508,7 +1511,7 @@ def t9(seed,sidebar_top):
             return bin_search_suff_arr(text,pattern,suff_arr,m+1, r)
             
     def suffix_types(text):
-        types = ['S']        
+        types = ['S']
         next_c = '$'
         for c in text[::-1][1:]:
             if c < next_c:
@@ -1517,13 +1520,16 @@ def t9(seed,sidebar_top):
                 types.append('L')
             else:
                 types.append(types[-1])
-            next_c = c  
-        return types[::-1]
- 
+            next_c = c        
+        types.reverse()
+        return types
+    
+    rg = np.random.default_rng(seed)
+    
+
     SIGMA_L = 97
-    SIGMA_R = 100
-    #text, text_tex, tlength = ut_rnd_string(seed, SIGMA_L, SIGMA_R, 12,18,True)    
-    text, text_tex, tlength, pattern, pattern_tex, plength = ut_rnd_text_and_pattern(seed, SIGMA_L,SIGMA_R)
+    SIGMA_R = SIGMA_L + rg.integers(3,5)    
+    text, text_tex, tlength, pattern, pattern_tex, plength = ut_rnd_text_and_pattern(seed, SIGMA_L,SIGMA_R, t_max_length = 16, p_min_length=2, p_max_length = 3)
     text += '$'
     text_tex += '\$'
     tlength += 1    
@@ -1537,17 +1543,17 @@ def t9(seed,sidebar_top):
 
     a1_input = st.text_input('Suffix-Typen','', key = 't9_a1_input')    
     a1_input_list = [ x for x in re.split(r'(,|;| ?)*', a1_input) if x != '']
-    suffix_types = suffix_types(text)
-    a1_solution = pd.DataFrame([list(text),suffix_types], index = ['T[i]','type[i..]'])
+    a1_suffix_types = suffix_types(text)    
+    a1_solution = pd.DataFrame([list(text),a1_suffix_types], index = ['T[i]','Typ'])
     a1_wrong_inputs = []
-    if a1_input_list != suffix_types:
+    if a1_input_list != a1_suffix_types:
         a1_wrong_inputs.append('die Suffix-Typen')    
 
     ut_check_task(a1_wrong_inputs, a1_solution, key = 't9_a1_check')
 
     lms_suffixes = []
     first_s_type = True
-    for i,t in enumerate(suffix_types):
+    for i,t in enumerate(a1_suffix_types):
         if t == 'S' and first_s_type:
             lms_suffixes.append(i) 
             first_s_type = False
@@ -1584,7 +1590,7 @@ def t9(seed,sidebar_top):
     
     for r in range(tlength):
         pos_r = suff_arr_li[r]
-        if pos_r != -1 and suffix_types[pos_r-1] == 'L':
+        if pos_r != -1 and a1_suffix_types[pos_r-1] == 'L':
             suff_arr_li[buckets_first_free_index[text[pos_r-1]]] = pos_r-1
             buckets_first_free_index[text[pos_r-1]] += 1
 
@@ -1617,7 +1623,7 @@ def t9(seed,sidebar_top):
 
     for r in range(tlength-1,0, -1):
         pos_r = suff_arr_ri[r]
-        if pos_r != -1 and suffix_types[pos_r-1] == 'S':            
+        if pos_r != -1 and a1_suffix_types[pos_r-1] == 'S':            
             suff_arr_ri[buckets_last_free_index[text[pos_r-1]]] = pos_r-1
             buckets_last_free_index[text[pos_r-1]] -= 1        
     suff_arr_ri[0] = tlength-1    
@@ -1711,12 +1717,479 @@ def t9(seed,sidebar_top):
     a7_solution_df = pd.DataFrame([(r,pos_r,ulen_r,sus_s) for r,pos_r,ulen_r,sus_s in zip(sus_ranks, sus_pos,[sus_length] * len(sus), sus)], index = [''] * len(sus), columns = ['r','pos[r]','ulen[r]','T[pos[r]:ulen[r]]'])
     ut_check_task(a7_wrong_inputs,a7_solution_df,key = 't9_a7_check')
 
+def t10(seed, sidebar_top):
+    def bwt(text, suff_arr):
+        bwt = np.ndarray(suff_arr.shape,dtype = object)
+        for r in range(len(text)):
+            bwt[r] = text[suff_arr[r]-1]
+        return bwt
+    
+    def suff_arr(text):
+        return np.array(sorted(range(len(text)), key = lambda i : text[i:]))
+    
+    def bwt_fm_index(bwt):
+        less = defaultdict(lambda : 0)
+        occ = defaultdict(lambda : 0)        
+        n = len(bwt)
+        sigma = set(bwt)        
+        occ[bwt[0],0] = 1
+        for i,c in enumerate(bwt[1:]): 
+            for s in sigma:
+                occ[s,i+1] = occ[s,i]                
+            occ[c,i+1] = occ[c,i]+1
+        for c in sigma:
+            for d in sigma:
+                if d < c:
+                    less[c] += occ[d,n-1]
+        return less, occ
+
+    def bwt_backward_search(pattern,less,occ):                
+        n = max(occ.keys(), key = lambda t : t[1])[1]+1        
+        l = 0        
+        r = n-1
+        for i in range(len(pattern)-1,-1,-1):
+            c = pattern[i]                                    
+            l = less[c] + occ[c, l-1]
+            r = less[c] + occ[c,r]-1            
+        return l,r
+
+    rg = np.random.default(seed)
+    SIGMA_L = 97
+    SIGMA_R = SIGMA_L + rg.integers(3,5)    
+    text, text_tex, tlength, pattern, pattern_tex, plength = ut_rnd_text_and_pattern(seed, SIGMA_L,SIGMA_R, t_max_length = 16, p_min_length=2, p_max_length = 3)
+    st.write(f'Gegeben sei der Text {text_tex} und das Muster {pattern_tex}.')
+    sidebar_top.info(f'{text_tex}\n\r{pattern_tex}')    
+
+    #A1
+    st.subheader('Aufgabe 1')
+    st.write('Geben Sie die Burrows-Wheeler-Transformation von $T$ an.')
+
+    a1_input = st.text_input('BWT','',key = 't10_a1_input')
+    t_suff_arr = suff_arr(text)
+    t_bwt_arr = bwt(text, t_suff_arr)
+    t_bwt = ''.join(t_bwt_arr)
+    t_bwt_tex = r'$\texttt{' + t_bwt.replace('$','\\$') + '}$'
+    a1_wrong_inputs = []
+    if a1_input != t_bwt:
+        a1_wrong_inputs.append('die Burrows-Wheeler-Transformation')
+    ut_check_task(a1_wrong_inputs, f'Burrows-Wheeler-Transformation von $T$: {t_bwt_tex}.', key = 't10_a1_check')
+
+    #A2
+    st.subheader('Aufgabe 2')
+    
+    a2_text, a2_text_tex, a2_tlength = ut_rnd_string(seed,SIGMA_L,SIGMA_R,8,17,sentinel = True,name="T'")    
+    a2_suff_arr = suff_arr(a2_text)
+    a2_bwt = ''.join(bwt(a2_text,a2_suff_arr))
+    a2_bwt_tex = r'$\texttt{' + a2_bwt.replace('$','\\$') + '}$'
+
+    st.write(f'Transformieren Sie den BWT-transformierten Text {a2_bwt_tex} zurück.')
+
+    a2_input = st.text_input('rücktransformierter Text','',key = 't10_a2_input')
+
+    a2_wrong_inputs = ['den rücktransformierten Text'] if a2_input != a2_bwt else []
+    ut_check_task(a2_wrong_inputs,f'Aus {a2_bwt_tex} rücktransformierter Text: {a2_text_tex}.', key = 't10_a2_check')
+    
+    #A3
+    st.subheader('Aufgabe 3')
+    st.write('Führen Sie auf dem Text $T$ eine Rückwärtssuche (Backward Search) durch. Geben Sie die Intervallgrenzen an $[L,R]$ an, so dass alle Vorkommen von $P$ in $T$ an $pos[r]$ mit $L\le r\le R$ beginnen.')
+    a3_cols = st.beta_columns([4,1,4])
+    a3_input_l = a3_cols[0].text_input('L','',key = 't10_a3_input_0')
+    a3_input_r = a3_cols[2].text_input('R','',key = 't10_a3_input_0')
+
+    l,r = bwt_backward_search(pattern,*bwt_fm_index(t_bwt))
+    a3_wrong_inputs = []
+    try:
+        if int(a3_input_l) != l:
+            a3_wrong_inputs.append('L')
+    except ValueError:
+        a3_wrong_inputs.append('L')
+    try:
+        if int(a3_input_r) != r:
+            a3_wrong_inputs.append('R')
+    except ValueError:
+        a3_wrong_inputs.append('R')
+    ut_check_task(a3_wrong_inputs,f'$[{l},{r}]$',key = 't10_a3_check')
+
+def edit_dist_dp(s1,s2):
+    d = np.ndarray((len(s1)+1,len(s2)+1), dtype = int)
+    for i in range(d.shape[0]):
+        d[i,0] = i        
+    for j in range(d.shape[1]):
+        d[0,j] = j
+    for i in range(1,d.shape[0]):
+        for j in range(1,d.shape[1]):
+            d[i,j] = min(d[i,j-1]+1, d[i-1,j-1] + (s1[i-1] != s2[j-1]), d[i-1,j]+1)
+    return d
+
+def edit_dist_dp_traceback(s1,s2,d,i,j):
+    if i == 0:
+        return [('-'*len(s2[:j]),s2[:j])]
+    if j ==0:
+        return [(s1[:i],'-'*len(s1[:i]))]
+    mins = [(i-1,j)]
+    min = d[i-1,j] + 1
+    if d[i-1,j-1] + (s1[i-1] != s2[j-1]) == min:
+        mins.append((i-1,j-1))
+    elif d[i-1,j-1] + (s1[i-1] != s2[j-1]) < min:
+        mins = [(i-1,j-1)]
+        min = d[i-1,j-1] + (s1[i-1] != s2[j-1])
+    if d[i,j-1] + 1 == min:
+        mins.append((i-1,j-1))
+    elif d[i,j-1] +1 < min:
+        mins = [(i,j-1)]
+        min =  d[i,j-1] +1
+    aligns = []
+    for k,l in mins:        
+        for c1,c2 in edit_dist_dp_traceback(s1,s2,d,k,l):
+            if (k,l) == (i-1,j):
+                aligns.append((c1+s1[i-1],c2+'-'))
+            elif (k,l) == (i-1,j-1):
+                aligns.append((c1+s1[i-1],c2+s2[j-1]))
+            else:
+                aligns.append((c1+'-',c2+s1[j-1]))
+    return aligns
+
+def t11(seed,sidebar_top):
+    def ham_dist(s1,s2):
+        if len(s1) != len(s2):
+            return None
+        else:
+            return sum(map(lambda s : s[0]!=s[1],zip(s1,s2)))
+        
+    def q_gram_dist(s1,s2,q,sigma):                
+        q_mers = list(map(''.join,itertools.product(sigma, repeat = q)))
+        s1_q = list(map(lambda i : s1[i:i+2], range(len(s1)-q+1)))
+        s2_q = list(map(lambda i : s2[i:i+2], range(len(s2)-q+1)))
+        c = 0
+        for x in q_mers:            
+            c += abs(s1_q.count(x) - s2_q.count(x))
+        return c
+
+    def edit_dist(s1,s2):
+        s1_len = len(s1)
+        s2_len = len(s2)
+        if s1_len == 0:
+            return s2_len
+        elif s2_len == 0:
+            return s1_len
+        elif s1_len == 1 and s2_len == 1:
+            return s1 != s2
+        else:
+            return min(
+                edit_dist(s1[:-1],s2[:-1]) + edit_dist(s1[-1],s2[-1]),
+                edit_dist(s1[:-1],s2) + 1,
+                edit_dist(s1,s2[:-1]) + 1
+                )
+
+    SIGMA_L = 97
+    SIGMA_R = 100
+    sigma = [ chr(i) for i in range(97,100) ]
+
+    rg = np.random.default_rng(seed)
+
+    s1,s1_tex,s1_len = ut_rnd_string(seed,SIGMA_L,SIGMA_R,16,17,name = 's_1')    
+    #s2,s2_tex,s2_len = ut_rnd_string(seed+1,SIGMA_L,SIGMA_R,16,17,name = 's_2')
+    
+    cycle_index = rg.integers(1,3)
+    tnk = rg.integers(3,5)
+    
+    positions = rg.integers(3,s1_len - 3, tnk - cycle_index)
+    s2l = list(s1[cycle_index:] + s1[-cycle_index:])
+    for i in positions:
+        sigma = list(map(chr,range(SIGMA_L,SIGMA_R)))
+        sigma.remove(s2l[i])
+        s2l[i] = rg.choice(sigma)
+    s2 = ''.join(s2l)
+    s2_len = s1_len
+    s2_tex = f'$s_2=\\texttt{{{s2}}}$'
+
+    sidebar_top.info(f'{s1_tex}\n\r{s2_tex}')
+
+    st.write(f'Gegeben seien die Strings {s1_tex} und {s2_tex}.')    
+    
+    st.subheader('Aufgabe 1')
+    st.write('Geben Sie die Hamming-Distanz $d_\\textsf H(s_1,s_2)$ an.')
+
+    a1_input = st.text_input('Hamming-Distanz','',key='t11_a1_input')
+    ham_dist_s1_s2 = ham_dist(s1,s2)
+
+    a1_wrong_inputs = []
+    try:
+        if int(a1_input) != ham_dist_s1_s2:
+            a1_wrong_inputs.append('die Hamming-Distanz')
+    except ValueError:
+        a1_wrong_inputs.append('die Hamming-Distanz')
+    ut_check_task(a1_wrong_inputs,f'$d_\mathsf H(s_1,s_2)={ham_dist_s1_s2}$',key = 't11_a1_check')
+
+    st.subheader('Aufgabe 2')
+    st.write('Geben Sie die 2-Gramm-Distanz $d_2(s_1,s_2)$ an.')
+
+    a2_input = st.text_input('2-Gramm-Distanz')    
+    two_gram_dist = q_gram_dist(s1,s2,2,sigma)
+    a2_wrong_inputs = []
+    try:
+        if int(a2_input) != two_gram_dist:
+            a2_wrong_inputs.append('die 2-Gramm-Distanz')
+    except ValueError:
+        a2_wrong_inputs.append('die 2-Gramm-Distanz')
+    ut_check_task(a2_wrong_inputs,f'$d_2(s_1,s_2)={two_gram_dist}$',key = 't11_a2_check')
+
+    #A3
+    st.subheader('Aufgabe 3')
+    st.write('Geben Sie die Edit-Distanz $d(s_1,s_2)$ an.')
+
+    a3_input = st.text_input('Edit-Distanz','',key='t11_a3_input')
+    edit_dist_s1_s2_d = edit_dist_dp(s1,s2)
+    edit_dist_s1_s2 = edit_dist_s1_s2_d[s1_len,s2_len]
+    a3_wrong_inputs = []
+    try:
+        if int(a3_input) != edit_dist_s1_s2:
+            a3_wrong_inputs.append('die Edit-Distanz')
+    except ValueError:
+        a3_wrong_inputs.append('die Edit-Distanz')
+    ut_check_task(a3_wrong_inputs,f'$d_(s_1,s_2)={edit_dist_s1_s2}$',key = 't11_a3_check')
+
+    #A4
+    st.subheader('Aufgabe 4')
+    st.write('Geben Sie das/ein optimales Alignment von $s_1$ und $s_2$ an.')
+    st.markdown('*Es muss dazu nicht der Edit-Graph erstellt werden.*')
+    a4_input_s1 = st.text_input('','', key = 't11_a4_input_s1')
+    a4_input_s2 = st.text_input('','', key = 't11_a4_input_s2')
+    opt_aligns = edit_dist_dp_traceback(s1,s2,edit_dist_s1_s2_d,s1_len,s2_len)
+    a4_wrong_inputs = []
+    if (a4_input_s1.strip(),a4_input_s2.strip()) not in opt_aligns:
+        a4_wrong_inputs.append('für das Alignment')
+    mid = []
+    for i, aa, bb in zip(range(len(opt_aligns[0][0])),*opt_aligns[0]):        
+        if aa == bb:            
+            mid.append('=')  
+        elif aa == '-':
+            mid.append('I')
+        elif bb == '-':
+            mid.append('D')
+        else:
+            mid.append('X')    
+    a4_solution = pd.DataFrame([list(opt_aligns[0][0]),mid,list(opt_aligns[0][1])], index = ['1','CIGAR String', '2'])
+    ut_check_task(a4_wrong_inputs, a4_solution, key = 't11_a4_check')
 
 
+def t12(seed, sidebar_top):
+    SIGMA_L = 97
+    SIGMA_R = 100
+    def edit_dist_dp_semi(t,p):
+        d = np.ndarray((len(p)+1,len(t)+1), dtype = int)
+        d[0,:] = 0
+        for i in range(len(p)):
+            d[i,0] = i
+        for i in range(1,d.shape[0]):
+            for j in range(1,d.shape[1]):
+                d[i,j] = min(d[i,j-1]+1, d[i-1,j-1] + (p[i-1] != t[j-1]), d[i-1,j]+1)
+        return d
+    
+    def last_k(d,k):
+        last_k = np.ndarray(d.shape[1], dtype = int)
+        last_k[0] = min(k,d.shape[0]-1)
+        for j in range(1,d.shape[1]):            
+            last_k[j] = min(last_k[j-1]+1, d.shape[0]-1)
+            while d[last_k[j],j] > k:
+                last_k[j] -= 1
+        return last_k
+    
+    def shift_and_approx(text,pattern, k, i):
+        mask = t3_a2_create_masks(pattern, SIGMA_L,SIGMA_R)
+        a = np.zeros(k+1, dtype = int)
+        for l in range(k+1):
+            a[l] = (1 << l) - 1
+        for j in range(i+1):            
+            for l in range(k,0,-1):
+                a[l] = (((a[l] << 1) | ((1<<l)-1)) & mask[text[j]]) | a[l-1] | (a[l-1] << 1)
+            a[0] = (a[0] << 1 | 1) & mask[text[j]]
+            for l in range(1,k+1):
+                a[l] |= (a[l-1] << 1)
+            if j == i:
+                return a
+  
+    text, text_tex, tlength, pattern, pattern_tex, plength = ut_rnd_text_and_pattern(seed, SIGMA_L,SIGMA_R, t_max_length = 16,p_min_length = 3, p_max_length = 3)
+    st.write(f'Gegeben sei der Text {text_tex} und das Muster {pattern_tex}.')
+    sidebar_top.info(f'{text_tex}\n\r{pattern_tex}')
+    
+    #A1
+    st.subheader('Aufgabe 1')
+    st.write('Erstellen Sie ein semi-globales Sequenzalignment für das Pattern $P$ mit $T$. Geben Sie die $\\textit{last}_k$-Funktion für $k = 1$ an.')
+
+    a1_input = st.text_input('last_k','', key = 't12_a1_input')
+    d = edit_dist_dp_semi(text,pattern)
+    lk = last_k(d,1)
+
+    a1_wrong_inputs = []
+    try:
+        a1_input_list = re.split(r'(,|;| ?)*',a1_input)
+        if lk != np.array(map(int, a1_input_list)):
+            a1_wrong_inputs.append('für die $\\textit{last}_k$-Funktion')
+    except ValueError:
+        a1_wrong_inputs.append('für die $\\textit{last}_k$-Funktion')
+
+    a1_solution = pd.DataFrame([lk], index = ['last_k[j]'])
+    ut_check_task(a1_wrong_inputs, a1_solution, key = 't12_a1_check')
+
+    st.subheader('Aufgabe 2')
+    rg = np.random.default_rng(seed)    
+    text_index = rg.integers(tlength//4 , tlength-(tlength//4))
+    a2_k = 1
+    st.write(f'Führen Sie den fehlertoleranten Shift-And Algorithmus auf dem Text $T$ mit dem Pattern $P$ für die Fehlerschranke $k={a2_k}$ aus. Geben Sie das Bitmuster $A_i$ jedes Automaten $i\\in\{{0,\\dots,1\\}}$ nach Bearbeitung des Zeichens $T[{text_index}] = {text[text_index]}$ an.')
+    a2_input = []
+    for l in range(a2_k+1):
+        a2_input.append(st.text_input(f'Bitmuster A_{l}'))
+    a2_a = list(shift_and_approx(text,pattern,a2_k,text_index))
+    a2_wrong_inputs = []
+    if list(map(ut_string_base2_to_int,a2_input)) != a2_a:
+        a2_wrong_inputs = ['die Bitmuster']
+    a2_solution = pd.DataFrame([ut_int_to_base2_string(x,plength) for x in a2_a], index = [ f'A_{l}' for l in range(a2_k+1) ],columns = ['Bitmuster'])
+    ut_check_task(a2_wrong_inputs, a2_solution, key = 't12_a2_check')
+
+def t13(seed, sidebar_top):
+    def align_free_end_gaps(s1,s2,score = lambda a,b : 1 if a == b else -1,gap = -1):
+        d = np.zeros((len(s1)+1,len(s2)+1),dtype=int)
+        d[0] = 0
+        d[:,0] = 0
+        for i in range(1,d.shape[0]):
+            for j in range(1,d.shape[1]):
+                d[i,j] = max(
+                    d[i-1,j] + gap,
+                    d[i-1,j-1] + score(s1[i-1],s2[j-1]),
+                    d[i,j-1] + gap
+                )        
+        return max(np.max(d[-1,:]),np.max(d[:,-1]))
+
+    def align_semi_global(s1,s2,score = lambda a,b : 1 if a == b else -1,gap = -1):
+        d = np.zeros((len(s1)+1,len(s2)+1),dtype=int)
+        d[0] = 0
+        for i in range(1,d.shape[0]):            
+            d[i,0] = i*gap
+            for j in range(1,d.shape[1]):
+                d[i,j] = max(
+                    d[i-1,j] + gap,
+                    d[i-1,j-1] + score(s1[i-1],s2[j-1]),
+                    d[i,j-1] + gap
+                )        
+        return np.max(d[-1])
+
+    def align_local(s1,s2,score = lambda a,b : 1 if a == b else -1,gap = -1):
+        d = np.zeros((len(s1)+1,len(s2)+1),dtype=int)
+        d[0] = 0
+        d[:,0] = 0
+        for i in range(1,d.shape[0]):
+            for j in range(1,d.shape[1]):
+                d[i,j] = max(
+                    d[i-1,j] + gap,
+                    d[i-1,j-1] + score(s1[i-1],s2[j-1]),
+                    d[i,j-1] + gap,
+                    0
+                )        
+        return max(d.flatten())
 
 
+    SIGMA_L = 97
+    SIGMA_R = 100
+    sigma = [ chr(i) for i in range(97,100) ]
+
+    rg = np.random.default_rng(seed)    
+    s1,s1_tex,s1_len = ut_rnd_string(seed,SIGMA_L,SIGMA_R,5,6,name = 's_1')    
+    s2,s2_tex,s2_len = ut_rnd_string(seed+1,SIGMA_L,SIGMA_R,5,6,name = 's_2')
+
+    sidebar_top.info(f'{s1_tex}\n\r{s2_tex}')
+
+    st.write(f'Gegeben seien die Strings {s1_tex} und {s2_tex}.')
+    
+    #A1
+    st.subheader('Aufgabe 1')
+    st.write('Geben Sie den Alignment-Score eines semi-globalen Alignments von $s_1$ und $s_2$ an ($s_1$: global, $s_2$: lokal).')
+
+    a1_input = st.text_input('Score', key = 't13_a1_input')
+    a1_solution = align_semi_global(s1,s2)
+    a1_wrong_inputs = []
+    try:
+        if int(a1_input) != a1_solution:
+            a1_wrong_inputs.append('den Alignment-Score')
+    except ValueError:
+        a1_wrong_inputs.append('den Alignment-Score')
+    ut_check_task(a1_wrong_inputs,f'Der Alignment-Score ist {a1_solution}.', key = 't13_a1_check')
 
 
+    #A2
+    st.subheader('Aufgabe 2')
+    st.write('Geben Sie den Alignment-Score eines Free End Gaps Alignments von $s_1$ und $s_2$ an.')
+    a2_input = st.text_input('Score', key = 't13_a2_input')
+    a2_solution = align_free_end_gaps(s1,s2)
+    a2_wrong_inputs = []
+    try:
+        if int(a2_input) != a2_solution:
+            a2_wrong_inputs.append('den Alignment-Score')
+    except ValueError:
+        a2_wrong_inputs.append('den Alignment-Score')
+    ut_check_task(a2_wrong_inputs,f'Der Alignment-Score ist {a2_solution}.', key = 't13_a2_check')
+
+
+    #A3
+    st.subheader('Aufgabe 3')
+    st.write('Geben Sie den Alignment-Score eines lokalen Alignments von $s_1$ und $s_2$ an.')
+    a3_input = st.text_input('Score', key = 't13_a3_input')
+    a3_solution = align_local(s1,s2)
+    a3_wrong_inputs = []
+    try:
+        if int(a3_input) != a3_solution:
+            a3_wrong_inputs.append('den Alignment-Score')
+    except ValueError:
+        a3_wrong_inputs.append('den Alignment-Score')
+    ut_check_task(a3_wrong_inputs,f'Der Alignment-Score ist {a3_solution}.', key = 't13_a3_check')
+
+def t14(seed, sidebar_top):
+    def align_global(s1,s2,score = lambda a,b : 1 if a == b else -1,gap = -1):
+        d = np.zeros((len(s1)+1,len(s2)+1),dtype=int)
+        for i in range(1,d.shape[0]):            
+            d[i,0] = i*gap
+            for j in range(1,d.shape[1]):
+                d[0,j] = j*gap
+                d[i,j] = max(
+                    d[i-1,j] + gap,
+                    d[i-1,j-1] + score(s1[i-1],s2[j-1]),
+                    d[i,j-1] + gap
+                )        
+        return d
+
+    SIGMA_L = 97
+    SIGMA_R = 100
+    sigma = [ chr(i) for i in range(97,100) ]
+
+    rg = np.random.default_rng(seed)    
+    s1,s1_tex,s1_len = ut_rnd_string(seed,SIGMA_L,SIGMA_R,5,6,name = 's_1')    
+    s2,s2_tex,s2_len = ut_rnd_string(seed+1,SIGMA_L,SIGMA_R,5,6,name = 's_2')
+    
+    sidebar_top.info(f'{s1_tex}\n\r{s2_tex}')
+
+    st.write(f'Gegeben seien die Strings {s1_tex} und {s2_tex}.')
+
+    #A1
+    st.subheader('Aufgabe 1')
+    st.write('Führen Sie den Hirschberg-Algorithmus für ein optimales Alignment von $s_1$ und $s_2$ aus. Geben Sie den Zeilenindex eines Eintrages in der mittleren Spalte an, so dass der optimale Pfad durch dieses Feld verläuft.')
+
+    left = align_global(s1,s2[:len(s2)//2])
+    right = align_global(s1[::-1],s2[(len(s2)//2)+1:][::-1])
+    left_argmax = np.argmax(left[:,-1])
+    right_argmax = np.argmax(right[:,-1])    
+    left_ind = left_argmax
+    #st.write(left[:,-1])
+    #st.write(right[:,-1])
+
+    a1_input = st.text_input('Zeilenindex',key = 't14_a1_check')
+    a1_wrong_inputs = []
+    try:
+        if int(a1_input) != left_ind:
+            a1_wrong_inputs.append('den Zeilenindex')
+    except ValueError:
+        a1_wrong_inputs.append('den Zeilenindex')
+
+    ut_check_task(a1_wrong_inputs, f'Der Zeilenindex eines optimalen Pfades für das Alignment ist {left_ind}.', key = 't14_a1_check')
 
 pages = {
     '00': home,
@@ -1728,7 +2201,12 @@ pages = {
     '06': t6,
     '07': t7,
     '08': t8,
-    '09': t9
+    '09': t9,
+    '10': t10,
+    '11': t11,
+    '12': t12,
+    '13': t13,
+    '14': t14
 }
 
 pages_titles = {
@@ -1741,15 +2219,20 @@ pages_titles = {
     '06': '06: Exakte Mustersuche auf Mengen von Mustern',
     '07': '07: Exakte Mustersuche mit erweiterten Mustern',
     '08': '08: Suffixbäume',
-    '09': '09: Suffixarrays'
+    '09': '09: Suffixarrays',
+    '10': '10: Burrows-Wheeler-Transformation',
+    '11': '11: Distanz- und Ähnlichkeitsmaße zwischen Sequenzen',
+    '12': '12: Approximatives Pattern-Matching',
+    '13': '13: Sequenzalignment in vier Varianten',
+    '14': '14: Erweiterungen des Sequenzalignments'    
 }
 
 def radio_format(str):
-    return pages_titles[str]    
+    return pages_titles[str]
 
 st.header('Algorithmen auf Sequenzen')
 sidebar_top = st.sidebar.empty()
-st.sidebar.title('Teil')
+st.sidebar.title('')
 selection = st.sidebar.radio("Gehe zu Teil",list(pages.keys()), format_func=radio_format)
 seed = st.sidebar.number_input('Seed',0,None,42)
 page = pages[selection]
